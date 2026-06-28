@@ -1,0 +1,1 @@
+if('serviceWorker' in navigator) {window.addEventListener('load', () => {navigator.serviceWorker.register('/smart-glasses-hud/sw.js', { scope: '/smart-glasses-hud/' })})}
