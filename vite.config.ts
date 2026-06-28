@@ -3,6 +3,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
+  base: '/smart-glasses-hud/',
   server: {
     https: true,
     host: true // Exposes the server on the local network (for testing on mobile)

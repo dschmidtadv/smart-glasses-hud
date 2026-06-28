@@ -4,6 +4,7 @@ export interface NavigationData {
   distance?: string;
   street?: string;
   speed?: string;
+  action?: string;
 }
 
 export type MQTTDataCallback = (data: NavigationData) => void;
