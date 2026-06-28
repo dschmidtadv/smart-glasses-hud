@@ -1,6 +1,4 @@
 // @ts-nocheck
-import * as mqtt from 'mqtt/dist/mqtt'; // Use browser build
-
 export interface NavigationData {
   direction?: string;
   distance?: string;
@@ -12,63 +10,56 @@ export type MQTTDataCallback = (data: NavigationData) => void;
 export type MQTTStateCallback = (connected: boolean) => void;
 
 class MQTTClient {
-  private client: mqtt.MqttClient | null = null;
-  // A randomized unique topic so no one else intercepts the testing data
-  private readonly TOPIC = 'smart-glasses-hud/dietrich/nav-v1';
-  private readonly BROKER_URL = 'wss://test.mosquitto.org:8081';
+  private eventSource: EventSource | null = null;
+  private TOPIC_URL = '';
 
   private dataCallbacks: Set<MQTTDataCallback> = new Set();
   private stateCallbacks: Set<MQTTStateCallback> = new Set();
 
   public connect() {
-    if (this.client) return;
+    if (this.eventSource) return;
 
-    console.log(`Connecting to MQTT Broker: ${this.BROKER_URL}...`);
-    this.client = mqtt.connect(this.BROKER_URL, {
-      protocol: 'wss'
-    });
+    // Extract secure topic from URL hash (e.g., #topic=a4b9c8...)
+    let topic = 'smart-glasses-hud-dietrich-v2'; // fallback legacy topic
+    const hashMatches = window.location.hash.match(/topic=([^&]+)/);
+    if (hashMatches && hashMatches[1]) {
+      topic = hashMatches[1];
+    }
+    
+    this.TOPIC_URL = `https://ntfy.sh/${topic}/sse?since=10m`;
 
-    this.client.on('connect', () => {
-      console.log('MQTT Connected successfully!');
+    console.log(`Connecting to Ntfy Server: ${this.TOPIC_URL}...`);
+    this.eventSource = new EventSource(this.TOPIC_URL);
+
+    this.eventSource.onopen = () => {
+      console.log('Ntfy Connected successfully!');
       this.notifyState(true);
-      
-      this.client?.subscribe(this.TOPIC, (err) => {
-        if (!err) {
-          console.log(`Subscribed to topic: ${this.TOPIC}`);
-        } else {
-          console.error('MQTT Subscription error:', err);
-        }
-      });
-    });
+    };
 
-    this.client.on('message', (topic, message) => {
-      if (topic === this.TOPIC) {
-        try {
-          const payloadStr = message.toString();
-          console.log(`[MQTT] Received on ${topic}:`, payloadStr);
-          const data: NavigationData = JSON.parse(payloadStr);
-          this.notifyData(data);
-        } catch (e) {
-          console.error('Failed to parse MQTT message:', e);
+    this.eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.event === 'message') {
+          console.log(`[Ntfy] Received:`, data.message);
+          const navData: NavigationData = JSON.parse(data.message);
+          this.notifyData(navData);
         }
+      } catch (e) {
+        console.error('Failed to parse Ntfy message:', e);
       }
-    });
+    };
 
-    this.client.on('error', (err) => {
-      console.error('MQTT Error:', err);
-      this.notifyState(false);
-    });
-
-    this.client.on('close', () => {
-      console.log('MQTT Connection closed');
-      this.notifyState(false);
-    });
+    this.eventSource.onerror = (err) => {
+      console.error('Ntfy Error:', err);
+      // EventSource automatically reconnects on error
+    };
   }
 
   public disconnect() {
-    if (this.client) {
-      this.client.end();
-      this.client = null;
+    if (this.eventSource) {
+      this.eventSource.close();
+      this.eventSource = null;
+      this.notifyState(false);
     }
   }
 

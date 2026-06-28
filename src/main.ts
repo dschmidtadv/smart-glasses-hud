@@ -56,7 +56,23 @@ mqttClient.onStateChange((connected) => {
   UI.cloudStatus.style.color = connected ? '#0f0' : '#f00';
 });
 
+const hudContainer = document.querySelector('.hud-container') as HTMLElement;
+
 mqttClient.onData((data) => {
+  if (data.action === 'speed_update') {
+    if (data.speed !== undefined) UI.speed.textContent = data.speed;
+    return;
+  }
+
+  if (data.action === 'clear') {
+    if (data.speed !== undefined) UI.speed.textContent = data.speed;
+    hudContainer.style.opacity = '0';
+    return;
+  }
+
+  // Restore opacity if it was hidden
+  hudContainer.style.opacity = '1';
+
   if (data.speed !== undefined) {
     UI.speed.textContent = data.speed;
   }
