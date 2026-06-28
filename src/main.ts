@@ -28,40 +28,43 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         Waiting for Cloud Data...
       </div>
     </div>
-    <div id="cloud-status" style="position: absolute; bottom: 10px; right: 10px; font-size: 12px; color: #ffeb3b; z-index: 100;">Connecting to Cloud...</div>
+    <div id="cloud-status" class="cloud-status">Connecting to Cloud...</div>
   </div>
 `;
 
-// Simple arrow map
 const maneuverIcons: Record<string, string> = {
   'turn-left': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10c3.3 0 6 2.7 6 6v4"/></svg>',
   'turn-right': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9H10c-3.3 0-6 2.7-6 6v4"/></svg>',
   'straight': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
   'slight-left': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 10L5 5l5-5"/><path d="M5 5h10c3.3 0 6 2.7 6 6v8"/></svg>',
   'slight-right': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 10l5-5-5-5"/><path d="M19 5H9c-3.3 0-6 2.7-6 6v8"/></svg>',
-  'u-turn': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10c3.3 0 6 2.7 6 6v4"/></svg>' // reusing left for now
+  'u-turn': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 17V7a3 3 0 0 1 6 0v10"/><path d="M5 13l4 4 4-4"/></svg>',
 };
 
 const UI = {
   speed: document.getElementById('current-speed')!,
+  speedLimit: document.getElementById('speed-limit')!,
   distance: document.getElementById('distance-value')!,
   instruction: document.getElementById('instruction-text')!,
   icon: document.getElementById('maneuver-icon')!,
-  cloudStatus: document.getElementById('cloud-status')!
+  cloudStatus: document.getElementById('cloud-status')!,
 };
 
-// Bind MQTT Client Events
 mqttClient.onStateChange((connected) => {
   UI.cloudStatus.textContent = connected ? 'Cloud Active' : 'Cloud Disconnected';
-  UI.cloudStatus.style.color = connected ? '#0f0' : '#f00';
+  UI.cloudStatus.classList.toggle('cloud-status--connected', connected);
+  UI.cloudStatus.classList.toggle('cloud-status--disconnected', !connected);
 });
 
 mqttClient.onData((data) => {
   if (data.speed !== undefined) {
     UI.speed.textContent = data.speed;
   }
+  if (data.speedLimit !== undefined) {
+    UI.speedLimit.textContent = String(data.speedLimit);
+  }
   if (data.direction) {
-    UI.icon.innerHTML = maneuverIcons[data.direction] || maneuverIcons['straight'];
+    UI.icon.innerHTML = maneuverIcons[data.direction] ?? maneuverIcons['straight'];
   }
   if (data.distance) {
     UI.distance.textContent = data.distance;

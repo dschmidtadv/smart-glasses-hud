@@ -1,5 +1,6 @@
 import { config } from './config';
 import type { TelemetryData } from './telemetry';
+import { haversineDistance } from './utils';
 
 export class RoadsEngine {
   private currentSpeedLimitMph: number | null = null;
@@ -20,7 +21,7 @@ export class RoadsEngine {
       return;
     }
 
-    const distanceSinceLastQuery = this.haversineDistance(
+    const distanceSinceLastQuery = haversineDistance(
       this.lastQueryLat, this.lastQueryLng,
       data.latitude, data.longitude
     );
@@ -63,22 +64,6 @@ export class RoadsEngine {
     }
   }
 
-  // Haversine formula (duplicated for module independence, could be extracted to utils)
-  private haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const toRad = (value: number) => value * Math.PI / 180;
-    const R = 6371e3;
-    const φ1 = toRad(lat1);
-    const φ2 = toRad(lat2);
-    const Δφ = toRad(lat2 - lat1);
-    const Δλ = toRad(lon2 - lon1);
-
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-    return R * c;
-  }
 }
 
 export const roadsEngine = new RoadsEngine();

@@ -1,40 +1,44 @@
-// @ts-nocheck
-import * as mqtt from 'mqtt/dist/mqtt'; // Use browser build
+import mqtt from 'mqtt'; // Resolved to browser ESM build via vite.config.ts alias
 
 export interface NavigationData {
   direction?: string;
   distance?: string;
   street?: string;
   speed?: string;
+  speedLimit?: number;
 }
 
 export type MQTTDataCallback = (data: NavigationData) => void;
 export type MQTTStateCallback = (connected: boolean) => void;
 
+const BROKER_URL: string =
+  import.meta.env.VITE_MQTT_BROKER_URL || 'wss://test.mosquitto.org:8081';
+const TOPIC: string =
+  import.meta.env.VITE_MQTT_TOPIC || 'smart-glasses-hud/dietrich/nav-v1';
+
+const RECONNECT_PERIOD_MS = 5000;
+
 class MQTTClient {
   private client: mqtt.MqttClient | null = null;
-  // A randomized unique topic so no one else intercepts the testing data
-  private readonly TOPIC = 'smart-glasses-hud/dietrich/nav-v1';
-  private readonly BROKER_URL = 'wss://test.mosquitto.org:8081';
-
   private dataCallbacks: Set<MQTTDataCallback> = new Set();
   private stateCallbacks: Set<MQTTStateCallback> = new Set();
 
   public connect() {
     if (this.client) return;
 
-    console.log(`Connecting to MQTT Broker: ${this.BROKER_URL}...`);
-    this.client = mqtt.connect(this.BROKER_URL, {
-      protocol: 'wss'
+    console.log(`Connecting to MQTT Broker: ${BROKER_URL}...`);
+    this.client = mqtt.connect(BROKER_URL, {
+      protocol: 'wss',
+      reconnectPeriod: RECONNECT_PERIOD_MS,
     });
 
     this.client.on('connect', () => {
       console.log('MQTT Connected successfully!');
       this.notifyState(true);
-      
-      this.client?.subscribe(this.TOPIC, (err) => {
+
+      this.client?.subscribe(TOPIC, (err) => {
         if (!err) {
-          console.log(`Subscribed to topic: ${this.TOPIC}`);
+          console.log(`Subscribed to topic: ${TOPIC}`);
         } else {
           console.error('MQTT Subscription error:', err);
         }
@@ -42,11 +46,11 @@ class MQTTClient {
     });
 
     this.client.on('message', (topic, message) => {
-      if (topic === this.TOPIC) {
+      if (topic === TOPIC) {
         try {
           const payloadStr = message.toString();
           console.log(`[MQTT] Received on ${topic}:`, payloadStr);
-          const data: NavigationData = JSON.parse(payloadStr);
+          const data: NavigationData = JSON.parse(payloadStr) as NavigationData;
           this.notifyData(data);
         } catch (e) {
           console.error('Failed to parse MQTT message:', e);
@@ -60,8 +64,12 @@ class MQTTClient {
     });
 
     this.client.on('close', () => {
-      console.log('MQTT Connection closed');
+      console.log('MQTT Connection closed. Reconnecting...');
       this.notifyState(false);
+    });
+
+    this.client.on('reconnect', () => {
+      console.log('MQTT Reconnecting...');
     });
   }
 
