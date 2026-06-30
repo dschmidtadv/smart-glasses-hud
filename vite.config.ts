@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [
     basicSsl(),
     VitePWA({
+      selfDestroying: true,
       registerType: 'autoUpdate',
       devOptions: {
         enabled: true
