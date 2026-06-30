@@ -11,14 +11,14 @@ export type MQTTDataCallback = (data: NavigationData) => void;
 export type MQTTStateCallback = (connected: boolean) => void;
 
 class MQTTClient {
-  private eventSource: EventSource | null = null;
+  private socket: WebSocket | null = null;
   private TOPIC_URL = '';
 
   private dataCallbacks: Set<MQTTDataCallback> = new Set();
   private stateCallbacks: Set<MQTTStateCallback> = new Set();
 
   public connect() {
-    if (this.eventSource) return;
+    if (this.socket) return;
 
     // Extract secure topic from URL hash (e.g., #topic=a4b9c8...)
     let topic = 'smart-glasses-hud-dietrich-v2'; // fallback legacy topic
@@ -27,39 +27,45 @@ class MQTTClient {
       topic = hashMatches[1];
     }
     
-    this.TOPIC_URL = `https://ntfy.sh/${topic}/sse?since=10m`;
+    this.TOPIC_URL = `wss://ntfy.sh/${topic}/ws`;
 
-    console.log(`Connecting to Ntfy Server: ${this.TOPIC_URL}...`);
-    this.eventSource = new EventSource(this.TOPIC_URL);
+    console.log(`Connecting to Ntfy WebSocket: ${this.TOPIC_URL}...`);
+    this.socket = new WebSocket(this.TOPIC_URL);
 
-    this.eventSource.onopen = () => {
-      console.log('Ntfy Connected successfully!');
+    this.socket.onopen = () => {
+      console.log('Ntfy WebSocket Connected successfully!');
       this.notifyState(true);
     };
 
-    this.eventSource.onmessage = (event) => {
+    this.socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.event === 'message') {
-          console.log(`[Ntfy] Received:`, data.message);
+          console.log(`[Ntfy WS] Received:`, data.message);
           const navData: NavigationData = JSON.parse(data.message);
           this.notifyData(navData);
         }
       } catch (e) {
-        console.error('Failed to parse Ntfy message:', e);
+        console.error('Failed to parse Ntfy WS message:', e);
       }
     };
 
-    this.eventSource.onerror = (err) => {
-      console.error('Ntfy Error:', err);
-      // EventSource automatically reconnects on error
+    this.socket.onerror = (err) => {
+      console.error('Ntfy WS Error:', err);
+    };
+
+    this.socket.onclose = () => {
+      console.log('Ntfy WS Closed. Reconnecting in 3s...');
+      this.notifyState(false);
+      this.socket = null;
+      setTimeout(() => this.connect(), 3000);
     };
   }
 
   public disconnect() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
       this.notifyState(false);
     }
   }
