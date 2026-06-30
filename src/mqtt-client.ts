@@ -11,61 +11,64 @@ export type MQTTDataCallback = (data: NavigationData) => void;
 export type MQTTStateCallback = (connected: boolean) => void;
 
 class MQTTClient {
-  private socket: WebSocket | null = null;
-  private TOPIC_URL = '';
+  private pollIntervalId: any = null;
+  private lastId: string = '';
+  private topic: string = '';
 
   private dataCallbacks: Set<MQTTDataCallback> = new Set();
   private stateCallbacks: Set<MQTTStateCallback> = new Set();
 
   public connect() {
-    if (this.socket) return;
+    if (this.pollIntervalId) return;
 
-    // Extract secure topic from URL hash (e.g., #topic=a4b9c8...)
-    let topic = 'smart-glasses-hud-dietrich-v2'; // fallback legacy topic
+    let topic = 'smart-glasses-hud-dietrich-v2';
     const hashMatches = window.location.hash.match(/topic=([^&]+)/);
     if (hashMatches && hashMatches[1]) {
       topic = hashMatches[1];
     }
-    
-    this.TOPIC_URL = `wss://ntfy.sh/${topic}/ws`;
+    this.topic = topic;
 
-    console.log(`Connecting to Ntfy WebSocket: ${this.TOPIC_URL}...`);
-    this.socket = new WebSocket(this.TOPIC_URL);
+    console.log(`Starting Ntfy HTTP Poller for topic: ${this.topic}...`);
+    this.notifyState(true);
 
-    this.socket.onopen = () => {
-      console.log('Ntfy WebSocket Connected successfully!');
-      this.notifyState(true);
-    };
-
-    this.socket.onmessage = (event) => {
+    this.pollIntervalId = setInterval(async () => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.event === 'message') {
-          console.log(`[Ntfy WS] Received:`, data.message);
-          const navData: NavigationData = JSON.parse(data.message);
-          this.notifyData(navData);
+        // First poll gets recent 2 minutes, subsequent polls use last message ID
+        const sinceParam = this.lastId ? `since=${this.lastId}` : `since=2m`;
+        const url = `https://ntfy.sh/${this.topic}/json?poll=1&${sinceParam}`;
+        
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const text = await response.text();
+        if (!text.trim()) return; // No new messages
+
+        const lines = text.trim().split('\n');
+        
+        for (const line of lines) {
+          if (!line) continue;
+          const data = JSON.parse(line);
+          
+          if (data.id) {
+             this.lastId = data.id;
+          }
+
+          if (data.event === 'message') {
+            console.log(`[Ntfy HTTP] Received:`, data.message);
+            const navData: NavigationData = JSON.parse(data.message);
+            this.notifyData(navData);
+          }
         }
       } catch (e) {
-        console.error('Failed to parse Ntfy WS message:', e);
+        console.error('Ntfy Polling Error:', e);
       }
-    };
-
-    this.socket.onerror = (err) => {
-      console.error('Ntfy WS Error:', err);
-    };
-
-    this.socket.onclose = () => {
-      console.log('Ntfy WS Closed. Reconnecting in 3s...');
-      this.notifyState(false);
-      this.socket = null;
-      setTimeout(() => this.connect(), 3000);
-    };
+    }, 2000); // Poll every 2 seconds
   }
 
   public disconnect() {
-    if (this.socket) {
-      this.socket.close();
-      this.socket = null;
+    if (this.pollIntervalId) {
+      clearInterval(this.pollIntervalId);
+      this.pollIntervalId = null;
       this.notifyState(false);
     }
   }
